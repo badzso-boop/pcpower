@@ -1,40 +1,16 @@
 const express = require('express');
 const path = require('path');
+const { execFile } = require('child_process');
 
 const app = express();
 const PORT = 3005;
 const HOST = '127.0.0.1';
-const GPIO_PIN = 17;
-const RELAY_ON = 0;  // aktív LOW: 0 = relé zár
-const RELAY_OFF = 1; // aktív LOW: 1 = relé nyit
-const TRIGGER_DURATION_MS = 1000;
+const TRIGGER_SCRIPT = path.join(__dirname, 'trigger.py');
 
-let gpio = null;
 let triggerInProgress = false;
 
-// GPIO inicializálás — csak valódi Raspberry Pi-n működik
-function initGpio() {
-  try {
-    const { Gpio } = require('onoff');
-    gpio = new Gpio(GPIO_PIN, 'out');
-    gpio.writeSync(RELAY_OFF);
-    console.log(`GPIO ${GPIO_PIN} inicializálva, relé nyitva.`);
-  } catch (err) {
-    console.warn('GPIO nem elérhető (nem Raspberry Pi?), szimulált módban fut.');
-    console.warn(err.message);
-  }
-}
-
-function cleanup() {
-  if (gpio) {
-    gpio.writeSync(RELAY_OFF);
-    gpio.unexport();
-  }
-  process.exit(0);
-}
-
-process.on('SIGINT', cleanup);
-process.on('SIGTERM', cleanup);
+process.on('SIGINT', () => process.exit(0));
+process.on('SIGTERM', () => process.exit(0));
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -46,25 +22,16 @@ app.post('/trigger', (req, res) => {
   triggerInProgress = true;
   console.log('Relé aktiválva — bekapcsolás folyamatban...');
 
-  if (gpio) {
-    gpio.writeSync(RELAY_ON);
-  } else {
-    console.log('[SZIMULÁCIÓ] Relé ZÁR');
-  }
-
-  setTimeout(() => {
-    if (gpio) {
-      gpio.writeSync(RELAY_OFF);
-    } else {
-      console.log('[SZIMULÁCIÓ] Relé NYIT');
-    }
+  execFile('python3', [TRIGGER_SCRIPT], (err) => {
     triggerInProgress = false;
+    if (err) {
+      console.error('GPIO hiba:', err.message);
+      return res.status(500).json({ error: 'GPIO hiba: ' + err.message });
+    }
     console.log('Relé visszaállt — kész.');
     res.json({ ok: true });
-  }, TRIGGER_DURATION_MS);
+  });
 });
-
-initGpio();
 
 app.listen(PORT, HOST, () => {
   console.log(`PC Power szerver fut: http://${HOST}:${PORT}`);
