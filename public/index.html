@@ -103,7 +103,7 @@
       statusEl.className = 'status visible';
 
       try {
-        const res = await fetch('/trigger', { method: 'POST' });
+        const res = await fetch('trigger', { method: 'POST' });
 
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
